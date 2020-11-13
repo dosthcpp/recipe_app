@@ -76,7 +76,6 @@ class _RecipePageState extends State<RecipePage> {
   }
 
   void fetchRecipe() async {
-    // TODO: 콩나물밥 고치기
     String data = await DefaultAssetBundle.of(context)
         .loadString('assets/data/recipe.json');
     List<dynamic> recipeDetail = jsonDecode(data);
@@ -139,15 +138,13 @@ class _RecipePageState extends State<RecipePage> {
             subIng += "$key $value / ",
           });
     }
-    subIng = subIng != '' ?  subIng.substring(0, subIng.length - 2) : '';
+    subIng = subIng != '' ? subIng.substring(0, subIng.length - 2) : '';
     for (int i = 0; i < recipe.ingredients["양념"].length; ++i) {
       recipe.ingredients['양념'][i].forEach((key, value) => {
             sauceIng += "$key $value / ",
           });
     }
     sauceIng = sauceIng != '' ? sauceIng.substring(0, sauceIng.length - 2) : '';
-
-    print(recipe.info);
     // 레시피 과정
     for (int i = 0; i < recipe.info.length; ++i) {
       recipeProcess.add(
@@ -162,7 +159,7 @@ class _RecipePageState extends State<RecipePage> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              recipe.info[i]["picture"] != ""
+              recipe?.info[i]["picture"] != ""
                   ? SizedBox(
                       child: Image(
                         width: MediaQuery.of(context).size.width - 20,
@@ -182,7 +179,6 @@ class _RecipePageState extends State<RecipePage> {
         ),
       );
     }
-
   }
 
   @override
@@ -211,13 +207,15 @@ class _RecipePageState extends State<RecipePage> {
             children: <Widget>[
               Stack(
                 children: [
-                  Image(
-                    image: NetworkImageWithRetry(
-                      recipe.picture,
-                    ),
-                    width: MediaQuery.of(context).size.width,
-                    fit: BoxFit.fitWidth,
-                  ),
+                  recipe?.picture != null
+                      ? Image(
+                          image: NetworkImageWithRetry(
+                            recipe.picture,
+                          ),
+                          width: MediaQuery.of(context).size.width,
+                          fit: BoxFit.fitWidth,
+                        )
+                      : CircularProgressIndicator(),
                   Positioned.fill(
                     child: Align(
                       alignment: Alignment.bottomCenter,
@@ -237,21 +235,26 @@ class _RecipePageState extends State<RecipePage> {
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  recipe.summary,
-                                  style: TextStyle(
-                                      color: Colors.white, fontSize: 15.0),
-                                ),
+                                recipe?.summary != null
+                                    ? Text(
+                                        recipe.summary,
+                                        style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 15.0),
+                                      )
+                                    : CircularProgressIndicator(),
                                 SizedBox(
                                   height: 10.0,
                                 ),
-                                Text(
-                                  recipe.name,
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 23.0),
-                                )
+                                recipe?.name != null
+                                    ? Text(
+                                        recipe.name,
+                                        style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 23.0),
+                                      )
+                                    : CircularProgressIndicator()
                               ],
                             ),
                           ),
@@ -311,11 +314,15 @@ class _RecipePageState extends State<RecipePage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text("${recipe.qnt} 기준",
-                                  style: TextStyle(
-                                    fontSize: 16.0,
-                                    fontWeight: FontWeight.bold,
-                                  )),
+                              recipe?.qnt != null
+                                  ? Text(
+                                      "${recipe.qnt} 기준",
+                                      style: TextStyle(
+                                        fontSize: 16.0,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    )
+                                  : CircularProgressIndicator(),
                               SizedBox(
                                 height: 20.0,
                               ),
@@ -323,10 +330,12 @@ class _RecipePageState extends State<RecipePage> {
                                 title: "주재료",
                                 color: Colors.pinkAccent,
                               ),
-                              mainIng != '' ? Text(
-                                mainIng,
-                                style: ingTextStyle,
-                              ) : Container(),
+                              mainIng != ''
+                                  ? Text(
+                                      mainIng,
+                                      style: ingTextStyle,
+                                    )
+                                  : Container(),
                               SizedBox(
                                 height: 20.0,
                               ),
@@ -334,10 +343,12 @@ class _RecipePageState extends State<RecipePage> {
                                 title: "부재료",
                                 color: Colors.blueAccent,
                               ),
-                              subIng != '' ? Text(
-                                subIng,
-                                style: ingTextStyle,
-                              ) : Container(),
+                              subIng != ''
+                                  ? Text(
+                                      subIng,
+                                      style: ingTextStyle,
+                                    )
+                                  : Container(),
                               SizedBox(
                                 height: 20.0,
                               ),
@@ -345,10 +356,12 @@ class _RecipePageState extends State<RecipePage> {
                                 title: "양념",
                                 color: Colors.yellow,
                               ),
-                              sauceIng != '' ? Text(
-                                sauceIng,
-                                style: ingTextStyle,
-                              ) : Container(),
+                              sauceIng != ''
+                                  ? Text(
+                                      sauceIng,
+                                      style: ingTextStyle,
+                                    )
+                                  : Container(),
                             ],
                           ),
                         ),
@@ -428,23 +441,23 @@ class _RecipePageState extends State<RecipePage> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
+                              recipe?.cal != null ? Text(
                                 "칼로리: ${recipe.cal}",
                                 style: TextStyle(
                                   fontSize: 16.0,
                                   fontWeight: FontWeight.bold,
                                 ),
-                              ),
+                              ) : CircularProgressIndicator(),
                               SizedBox(
                                 height: 25.0,
                               ),
-                              Text(
+                              recipe?.level != null ? Text(
                                 "난이도: ${recipe.level}",
                                 style: TextStyle(
                                   fontSize: 16.0,
                                   fontWeight: FontWeight.bold,
                                 ),
-                              ),
+                              ) : CircularProgressIndicator(),
                             ],
                           ),
                         )

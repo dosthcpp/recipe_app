@@ -20,7 +20,7 @@ class _InitPageState extends State<InitPage> {
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
+          children: [
             Text(
               "오늘뭐먹지?",
               style: TextStyle(
@@ -78,13 +78,15 @@ class _InitPageState extends State<InitPage> {
                     print(dropdownValue);
                   });
                 },
-                items: <String>['냉장고 속 재료를 골라주세요.', '가지', '감자']
-                    .map<DropdownMenuItem<String>>((value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
+                items: ['냉장고 속 재료를 골라주세요.', '가지', '감자']
+                    .map<DropdownMenuItem<String>>(
+                  (value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    );
+                  },
+                ).toList(),
               ),
             ),
             SizedBox(
