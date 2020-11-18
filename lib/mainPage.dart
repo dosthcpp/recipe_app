@@ -8,6 +8,10 @@ import 'package:recipe_app/searchResult.dart';
 import 'package:recipe_app/recipePage.dart';
 
 class MainPage extends StatefulWidget {
+  final userFavor;
+
+  MainPage({this.userFavor});
+
   @override
   _MainPageState createState() => _MainPageState();
 }
@@ -32,6 +36,7 @@ class _MainPageState extends State<MainPage> {
   void initState() {
     fetchIngredients();
     fetchRecipe();
+    print(widget.userFavor);
   }
 
   void runEverytimeToMatch() {
@@ -127,6 +132,40 @@ class _MainPageState extends State<MainPage> {
             child: Center(
               child: Column(
                 children: <Widget>[
+                  MaterialButton(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        vertical: 10.0,
+                      ),
+                      child: Container(
+                        width: MediaQuery.of(context).size.width - 30,
+                        height: 40.0,
+                        decoration: BoxDecoration(
+                          color: Colors.blueAccent,
+                          borderRadius: BorderRadius.circular(
+                            10.0,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            "유저 데이터 기반 검색",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                    padding: EdgeInsets.all(0),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SearchResult(
+                            searchParam: List<String>.from(widget.userFavor),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                   MaterialButton(
                     child: Padding(
                       padding: EdgeInsets.symmetric(
@@ -395,16 +434,16 @@ class _MainPageState extends State<MainPage> {
                                     Recipe search = recipeList
                                         .where((cur) => cur.name == searchParam)
                                         .toList()[0];
-                                    if(search != null) {
+                                    if (search != null) {
                                       var parsedSearchParam = [
                                         ...?search.ingredients['주재료'],
                                         ...?search.ingredients['부재료'],
                                         ...?search.ingredients['양념'],
                                       ]
                                           .map((cur) => Map.from(cur)
-                                          .keys
-                                          .toString()
-                                          .replaceAll(RegExp('[()]'), ''))
+                                              .keys
+                                              .toString()
+                                              .replaceAll(RegExp('[()]'), ''))
                                           .toList();
                                       parsedSearchParam
                                           .sort((a, b) => a.compareTo(b));
@@ -412,12 +451,13 @@ class _MainPageState extends State<MainPage> {
                                         context,
                                         MaterialPageRoute(
                                           builder: (context) => RecipePage(
-                                            ingredientsForSearch: parsedSearchParam,
+                                            ingredientsForSearch:
+                                                parsedSearchParam,
                                           ),
                                         ),
                                       );
                                     }
-                                  } catch(e) {
+                                  } catch (e) {
                                     final alert = AlertDialog(
                                       title: Text('App'),
                                       content: Text('검색 결과가 존재하지 않습니다.'),

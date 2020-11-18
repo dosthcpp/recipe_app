@@ -1,14 +1,38 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:mongo_dart/mongo_dart.dart' as mongo;
+import 'package:crypto/crypto.dart';
 
 class SignUpPage extends StatefulWidget {
   @override
   _SignUpPageState createState() => _SignUpPageState();
 }
 
+class Data {
+  String value;
+}
+
 class _SignUpPageState extends State<SignUpPage> {
-  String dropdownValue = '냉장고 속 재료를 골라주세요.';
+  String dropdownTitle = '선택해주세요 (더블클릭시 삭제)';
+  List<String> ingredientListForAdd = [];
   final _formKeyID = GlobalKey<FormState>();
   final _formKeyPWD = GlobalKey<FormState>();
+  List<dynamic> ingredientList;
+  Data idObj = Data();
+  Data passwordObj = Data();
+
+  @override
+  void initState() {
+    fetchIngredients();
+  }
+
+  Future<List<dynamic>> fetchIngredients() async {
+    String data = await DefaultAssetBundle.of(context)
+        .loadString('assets/data/ingredient.json');
+    ingredientList = jsonDecode(data).map((cur) => cur["name"]).toList();
+    return ingredientList;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +56,7 @@ class _SignUpPageState extends State<SignUpPage> {
             InputField(
               form: _formKeyID,
               hintText: '아이디를 입력해주세요',
+              context: idObj,
             ),
             SizedBox(
               height: 20.0,
@@ -40,31 +65,88 @@ class _SignUpPageState extends State<SignUpPage> {
               form: _formKeyPWD,
               hintText: '비밀번호를 입력해주세요',
               isPasswordField: true,
+              context: passwordObj,
             ),
             SizedBox(
               height: 20.0,
             ),
-            Container(
-              height: 50.0,
-              width: _width,
-              child: DropdownButton<String>(
-                isExpanded: true,
-                value: dropdownValue,
-                icon: Icon(Icons.arrow_drop_down),
-                iconSize: 24,
-                onChanged: (val) {
-                  dropdownValue = val;
-                  setState(() {
-                    print(dropdownValue);
-                  });
-                },
-                items: <String>['냉장고 속 재료를 골라주세요.', '가지', '감자']
-                    .map<DropdownMenuItem<String>>((value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
+            FutureBuilder(
+              future: fetchIngredients(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Container(
+                    height: 50.0,
+                    width: _width,
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: dropdownTitle,
+                      icon: Icon(Icons.arrow_drop_down),
+                      iconSize: 24,
+                      onChanged: (val) {
+                        setState(() {
+                          ingredientListForAdd.add(val);
+                        });
+                      },
+                      items: ['선택해주세요 (더블클릭시 삭제)', ...snapshot.data]
+                          .map<DropdownMenuItem<String>>(
+                        (value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          );
+                        },
+                      ).toList(),
+                    ),
                   );
-                }).toList(),
+                }
+                return CircularProgressIndicator();
+              },
+            ),
+            SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  SizedBox(
+                    height: 50, // <-- you should put some value here
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 1,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 15.0,
+                          ),
+                          child: Row(
+                            children: [
+                              ...ingredientListForAdd.map(
+                                (value) => Padding(
+                                  padding: EdgeInsets.only(right: 10.0),
+                                  child: GestureDetector(
+                                    child: Text(
+                                      value,
+                                      style: TextStyle(
+                                        fontSize: 20.0,
+                                      ),
+                                    ),
+                                    onDoubleTap: () {
+                                      setState(
+                                        () {
+                                          ingredientListForAdd
+                                              .removeWhere((el) => el == value);
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
             SizedBox(
@@ -73,9 +155,30 @@ class _SignUpPageState extends State<SignUpPage> {
             Builder(
               builder: (context) => MaterialButton(
                 padding: EdgeInsets.all(0),
-                onPressed: () {
+                onPressed: () async {
                   if (_formKeyID.currentState.validate() &&
                       _formKeyPWD.currentState.validate()) {
+                    try {
+                      final db = mongo.Db('mongodb://songbae:dotslab1234@'
+                          'cluster0-shard-00-00.isb9a.mongodb.net:27017,'
+                          'cluster0-shard-00-01.isb9a.mongodb.net:27017,'
+                          'cluster0-shard-00-02.isb9a.mongodb.net:27017/'
+                          'toy_project?authSource=admin&compressors=disabled'
+                          '&gssapiServiceName=mongodb&retryWrites=true&w=majority'
+                          '&ssl=true');
+                      await db.open();
+                      final collection = db.collection('users');
+                      await collection.insert({
+                        'id': idObj.value,
+                        'password': md5
+                            .convert(utf8.encode(passwordObj.value))
+                            .toString(),
+                        'ingList': jsonEncode(ingredientListForAdd),
+                      });
+                      db.close();
+                    } catch (e) {
+                      print(e);
+                    }
                     Scaffold.of(context)
                         .showSnackBar(
                           SnackBar(
@@ -122,9 +225,10 @@ class _SignUpPageState extends State<SignUpPage> {
 class InputField extends StatefulWidget {
   bool isPasswordField = false;
   final String hintText;
+  Data context;
   final GlobalKey<FormState> form;
 
-  InputField({this.isPasswordField, this.hintText, this.form});
+  InputField({this.isPasswordField, this.hintText, this.context, this.form});
 
   @override
   _InputFieldState createState() => _InputFieldState();
@@ -139,6 +243,9 @@ class _InputFieldState extends State<InputField> {
         width: MediaQuery.of(context).size.width - 30,
         height: 50.0,
         child: TextFormField(
+          onChanged: (newVal) {
+            widget.context.value = newVal;
+          },
           validator: (value) {
             if (value.isEmpty) {
               return '텍스트를 입력해주세요';

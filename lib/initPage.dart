@@ -29,68 +29,7 @@ class _InitPageState extends State<InitPage> {
               ),
             ),
             SizedBox(
-              height: 25.0,
-            ),
-            Container(
-              width: _width,
               height: 50.0,
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: 'ID를 입력해주세요',
-                  border: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.black54,
-                  )),
-                ),
-              ),
-            ),
-            SizedBox(
-              height: 20.0,
-            ),
-            Container(
-              width: _width,
-              height: 50.0,
-              child: TextField(
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Password를 입력해주세요',
-                  border: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.black54,
-                  )),
-                ),
-              ),
-            ),
-            SizedBox(
-              height: 30.0,
-            ),
-            Container(
-              height: 50.0,
-              width: _width,
-              child: DropdownButton<String>(
-                isExpanded: true,
-                value: dropdownValue,
-                icon: Icon(Icons.arrow_drop_down),
-                iconSize: 24,
-                onChanged: (val) {
-                  dropdownValue = val;
-                  setState(() {
-                    print(dropdownValue);
-                  });
-                },
-                items: ['냉장고 속 재료를 골라주세요.', '가지', '감자']
-                    .map<DropdownMenuItem<String>>(
-                  (value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value),
-                    );
-                  },
-                ).toList(),
-              ),
-            ),
-            SizedBox(
-              height: 10.0,
             ),
             MaterialButton(
               padding: EdgeInsets.all(0),
@@ -125,7 +64,22 @@ class _InitPageState extends State<InitPage> {
               ),
             ),
             MaterialButton(
-              child: Text("로그인"),
+              child: Container(
+                width: _width,
+                height: 40.0,
+                decoration: BoxDecoration(
+                  color: Colors.pinkAccent,
+                  borderRadius: BorderRadius.circular(
+                    10.0,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    "로그인",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
               onPressed: () {
                 Navigator.push(context,
                     MaterialPageRoute(builder: (context) => LoginPage()));
