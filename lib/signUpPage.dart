@@ -108,7 +108,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   SizedBox(
-                    height: 50, // <-- you should put some value here
+                    height: 50,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: 1,

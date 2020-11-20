@@ -19,11 +19,19 @@ class Data {
 class _LoginPage extends State<LoginPage> {
   String id, passwd;
   List<String> ingredientList = [];
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  LocalStorage storage;
+
+  @override
+  void initState() {
+    storage = LocalStorage('login_info');
+  }
 
   @override
   Widget build(BuildContext context) {
     final _width = MediaQuery.of(context).size.width - 30;
     return Scaffold(
+      key: _scaffoldKey,
       resizeToAvoidBottomPadding: false,
       body: Center(
         child: Column(
@@ -58,70 +66,89 @@ class _LoginPage extends State<LoginPage> {
             SizedBox(
               height: 30.0,
             ),
-            Builder(
-              builder: (context) => MaterialButton(
-                padding: EdgeInsets.all(0),
-                onPressed: () async {
-                  try {
-                    final db = mongo.Db('mongodb://songbae:dotslab1234@'
-                        'cluster0-shard-00-00.isb9a.mongodb.net:27017,'
-                        'cluster0-shard-00-01.isb9a.mongodb.net:27017,'
-                        'cluster0-shard-00-02.isb9a.mongodb.net:27017/'
-                        'toy_project?authSource=admin&compressors=disabled'
-                        '&gssapiServiceName=mongodb&retryWrites=true&w=majority'
-                        '&ssl=true');
-                    await db.open();
-                    final collection = db.collection('users');
-                    collection.find().forEach((v) {
-                      if (v['id'] == id &&
-                          v['password'] ==
-                              md5.convert(utf8.encode(passwd)).toString()) {
-                        LocalStorage storage = LocalStorage('login_info');
+            MaterialButton(
+              padding: EdgeInsets.all(0),
+              onPressed: () async {
+                try {
+                  final db = mongo.Db('mongodb://songbae:dotslab1234@'
+                      'cluster0-shard-00-00.isb9a.mongodb.net:27017,'
+                      'cluster0-shard-00-01.isb9a.mongodb.net:27017,'
+                      'cluster0-shard-00-02.isb9a.mongodb.net:27017/'
+                      'toy_project?authSource=admin&compressors=disabled'
+                      '&gssapiServiceName=mongodb&retryWrites=true&w=majority'
+                      '&ssl=true');
+                  await db.open();
+                  final collection = db.collection('users');
+                  collection.find().forEach((v) {
+                    if (v['id'] == id &&
+                        v['password'] ==
+                            md5.convert(utf8.encode(passwd)).toString()) {
+                      setState(() {
                         storage.setItem(
-                            'info',
-                            jsonEncode(
-                              {'id': id, 'userFavor': jsonDecode(v['ingList'])},
-                            ));
-                        Scaffold.of(context)
-                            .showSnackBar(
-                              SnackBar(
-                                duration: Duration(
-                                  seconds: 2,
-                                ),
-                                content: Text('로그인 진행중입니다..'),
+                          'info',
+                          jsonEncode(
+                            {
+                              'id': id,
+                              'userFavor': jsonDecode(v['ingList']),
+                              'passwd':
+                                  md5.convert(utf8.encode(passwd)).toString()
+                            },
+                          ),
+                        );
+                      });
+                      _scaffoldKey.currentState
+                          .showSnackBar(
+                            SnackBar(
+                              duration: Duration(
+                                seconds: 2,
                               ),
-                            )
-                            .closed
-                            .then((reason) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => MainPage(
-                                userFavor: jsonDecode(v['ingList']),
-                              ),
+                              content: Text('로그인 진행중입니다..'),
                             ),
-                          );
-                        });
-                      }
-                    });
-                  } catch (e) {
-                    print(e);
-                  }
-                },
-                child: Container(
-                  width: _width,
-                  height: 40.0,
-                  decoration: BoxDecoration(
-                    color: Colors.pinkAccent,
-                    borderRadius: BorderRadius.circular(
-                      10.0,
-                    ),
+                          )
+                          .closed
+                          .then((_) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => MainPage(),
+                          ),
+                        );
+                      });
+                    } else {
+                      // final alert = AlertDialog(
+                      //   title: Text('App'),
+                      //   content: Text('해당하는 아이디가 없거나 비밀번호가 틀립니다.'),
+                      //   actions: [
+                      //     FlatButton(
+                      //         onPressed: () {
+                      //           Navigator.pop(context);
+                      //         },
+                      //         child: Text('OK'))
+                      //   ],
+                      // );
+                      // showDialog(
+                      //   context: context,
+                      //   builder: (_) => alert,
+                      // );
+                    }
+                  });
+                } catch (e) {
+                  print(e);
+                }
+              },
+              child: Container(
+                width: _width,
+                height: 40.0,
+                decoration: BoxDecoration(
+                  color: Colors.pinkAccent,
+                  borderRadius: BorderRadius.circular(
+                    10.0,
                   ),
-                  child: Center(
-                    child: Text(
-                      "로그인",
-                      style: TextStyle(color: Colors.white),
-                    ),
+                ),
+                child: Center(
+                  child: Text(
+                    "로그인",
+                    style: TextStyle(color: Colors.white),
                   ),
                 ),
               ),

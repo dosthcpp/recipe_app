@@ -10,7 +10,6 @@ class InitPage extends StatefulWidget {
 }
 
 class _InitPageState extends State<InitPage> {
-  String dropdownValue = '냉장고 속 재료를 골라주세요.';
 
   @override
   Widget build(BuildContext context) {

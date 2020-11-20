@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flushbar/flushbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image/network.dart';
 import 'package:recipe_app/recipePage.dart';
@@ -23,7 +24,6 @@ class _SearchResultState extends State<SearchResult> {
   List<Recipe> recipeListForRenderOrderedByFactor = [];
 
   List<int> recommendation = List.filled(500, 0, growable: false);
-
 
   @override
   void initState() {
@@ -52,9 +52,7 @@ class _SearchResultState extends State<SearchResult> {
         }
       },
     );
-
   }
-
 
   Future<List<Recipe>> fetchIngredientList() async {
     String data = await DefaultAssetBundle.of(context)
@@ -189,14 +187,24 @@ class _SearchResultState extends State<SearchResult> {
                 transform: Matrix4.translationValues(-10, 0, 0),
                 child: Container(
                   width: 30.0,
-                  child: MaterialButton(
-                    padding: EdgeInsets.all(0),
-                    onPressed: () {},
-                    child: Icon(
-                      Icons.person_outline,
-                      color: Colors.black45,
-                    ),
-                  ),
+                  child: widget.willOrderByFactor == null
+                      ? MaterialButton(
+                          padding: EdgeInsets.all(0),
+                          onPressed: () {
+                            Flushbar(
+                              flushbarPosition: FlushbarPosition.BOTTOM,
+                              backgroundColor: Colors.blueAccent,
+                              title: "선택된 재료",
+                              message: "${widget.searchParam}",
+                              duration: Duration(seconds: 2),
+                            ).show(context);
+                          },
+                          child: Icon(
+                            Icons.person_outline,
+                            color: Colors.black45,
+                          ),
+                        )
+                      : null,
                 ),
               ),
             ],
