@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:recipe_app/amendingIng.dart';
-import 'package:recipe_app/mainPage.dart';
+import 'package:recipe_app/changeDate.dart';
+import 'package:recipe_app/write.dart';
 
 class InfoPage extends StatefulWidget {
   static const id = 'info_page';
@@ -119,12 +120,16 @@ class _InfoPageState extends State<InfoPage> {
                       MaterialButton(
                         padding: EdgeInsets.all(0),
                         child: Text("유통기한 확인"),
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.pushNamed(context, ChangeDate.id);
+                        },
                       ),
                       MaterialButton(
                         padding: EdgeInsets.all(0),
                         child: Text("내가 쓴 글"),
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.pushNamed(context, Write.id);
+                        },
                       ),
                       MaterialButton(
                         padding: EdgeInsets.all(0),

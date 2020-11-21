@@ -7,6 +7,7 @@ import 'package:localstorage/localstorage.dart';
 import 'package:recipe_app/infoPage.dart';
 import 'package:recipe_app/searchResult.dart';
 import 'package:recipe_app/recipePage.dart';
+import 'package:recipe_app/write.dart';
 
 class MainPage extends StatefulWidget {
   static const id = 'main_page';
@@ -81,7 +82,7 @@ class _MainPageState extends State<MainPage> {
       onWillPop: () async => false,
       child: Scaffold(
         appBar: PreferredSize(
-          preferredSize: Size.fromHeight(40.0),
+          preferredSize: Size.fromHeight(45.0),
           child: Transform(
             transform: Matrix4.translationValues(0, -5.0, 0),
             child: AppBar(
@@ -103,20 +104,36 @@ class _MainPageState extends State<MainPage> {
               ),
               backgroundColor: Colors.white,
               elevation: 5.0,
-              title: Text(
-                '오늘뭐먹지?',
-                style: TextStyle(color: Colors.black45),
+              title: Padding(
+                padding: EdgeInsets.only(left: 70.0),
+                child: Text(
+                  '오늘뭐먹지?',
+                  style: TextStyle(color: Colors.black45),
+                ),
               ),
-              actions: <Widget>[
+              actions: [
                 Container(
                   width: 30.0,
                   child: MaterialButton(
                     padding: EdgeInsets.all(0),
                     onPressed: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => InfoPage()));
+                      Navigator.pushNamed(context, Write.id);
+                    },
+                    child: SizedBox(
+                      width: 20.0,
+                      child: Image.asset(
+                        'assets/pencil.png',
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 30.0,
+                  child: MaterialButton(
+                    padding: EdgeInsets.all(0),
+                    onPressed: () {
+                      Navigator.pushNamed(context, InfoPage.id);
                     },
                     child: Icon(
                       Icons.person_outline,

@@ -167,20 +167,44 @@ class _SignUpPageState extends State<SignUpPage> {
                           '&gssapiServiceName=mongodb&retryWrites=true&w=majority'
                           '&ssl=true');
                       await db.open();
+                      bool isDup = false;
                       final collection = db.collection('users');
-                      await collection.insert({
-                        'id': idObj.value,
-                        'password': md5
-                            .convert(utf8.encode(passwordObj.value))
-                            .toString(),
-                        'ingList': jsonEncode(ingredientListForAdd),
+                      final collection2 = db.collection('ingredients');
+                      await collection.find({"id": idObj.value}).forEach((element) async {
+                        if(element != null) {
+                          final alert = AlertDialog(
+                            title: Text('App'),
+                            content: Text('아이디가 중복됩니다..'),
+                            actions: [
+                              FlatButton(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                  },
+                                  child: Text('OK'))
+                            ],
+                          );
+                          showDialog(
+                            context: context,
+                            builder: (_) => alert,
+                          );
+                          isDup = true;
+                        }
                       });
-                      db.close();
-                    } catch (e) {
-                      print(e);
-                    }
-                    Scaffold.of(context)
-                        .showSnackBar(
+                      // 중복제거
+                      if(!isDup) {
+                        await collection.insert({
+                          'id': idObj.value,
+                          'password': md5
+                              .convert(utf8.encode(passwordObj.value))
+                              .toString(),
+                          'ingList': jsonEncode(ingredientListForAdd),
+                        });
+                        await collection2.insert({
+                          'id': idObj.value,
+                          'expiry': null,
+                        });
+                        Scaffold.of(context)
+                            .showSnackBar(
                           SnackBar(
                             duration: Duration(
                               seconds: 2,
@@ -188,10 +212,15 @@ class _SignUpPageState extends State<SignUpPage> {
                             content: Text('회원가입 진행중입니다..'),
                           ),
                         )
-                        .closed
-                        .then((reason) {
-                      Navigator.of(context).popUntil((route) => route.isFirst);
-                    });
+                            .closed
+                            .then((reason) {
+                          Navigator.of(context).popUntil((route) => route.isFirst);
+                        });
+                      }
+                      db.close();
+                    } catch (e) {
+                      print(e);
+                    }
                   }
                 },
                 child: Container(
