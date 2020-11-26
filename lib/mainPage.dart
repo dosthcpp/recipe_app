@@ -1,13 +1,17 @@
 import 'dart:convert';
 import 'dart:collection';
-
 import 'package:file/local.dart';
 import 'package:flutter/material.dart';
 import 'package:localstorage/localstorage.dart';
+import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:recipe_app/infoPage.dart';
 import 'package:recipe_app/searchResult.dart';
 import 'package:recipe_app/recipePage.dart';
 import 'package:recipe_app/write.dart';
+import 'package:recipe_app/individualRecipe.dart';
+import 'package:avatar_glow/avatar_glow.dart';
+import 'package:highlight_text/highlight_text.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class MainPage extends StatefulWidget {
   static const id = 'main_page';
@@ -32,13 +36,74 @@ class _MainPageState extends State<MainPage> {
   List<Recipe> recipeList = [];
   TextEditingController _controller = TextEditingController();
 
-  LocalStorage storage;
+  LocalStorage _storage;
+  LocalStorage _storage2;
+
+  mongo.Db db;
+  mongo.DbCollection collection;
+  mongo.DbCollection collection2;
+  mongo.GridFS bucket;
+
+  List<Map<String, dynamic>> _recipeList = [];
+  Future _recipeListAfterFetch;
+  List<ImageProvider> _imgList = [];
+
+  stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  String _text = '추가할 재료를 말하세요';
 
   @override
   void initState() {
+    _storage = LocalStorage('login_info');
+    _storage2 = LocalStorage('reipce_info');
     fetchIngredients();
     fetchRecipe();
-    storage = LocalStorage('login_info');
+    db = mongo.Db('mongodb://songbae:dotslab1234@'
+        'cluster0-shard-00-00.isb9a.mongodb.net:27017,'
+        'cluster0-shard-00-01.isb9a.mongodb.net:27017,'
+        'cluster0-shard-00-02.isb9a.mongodb.net:27017/'
+        'toy_project?authSource=admin&compressors=disabled'
+        '&gssapiServiceName=mongodb&retryWrites=true&w=majority'
+        '&ssl=true');
+    collection = db.collection('users');
+    collection2 = db.collection('recipe');
+    _recipeListAfterFetch = mongoCheck();
+  }
+
+  refreshState() async {
+    _recipeListAfterFetch = mongoCheck();
+  }
+
+  Future<List<Map<String, dynamic>>> mongoCheck() async {
+    await db.open(secure: true);
+    final _localStorage = jsonDecode(_storage.getItem('info'));
+    await collection.find({"id": _localStorage["id"]}).forEach((element) async {
+      if (element['recipeCnt'] == null) {
+        await collection.update({
+          "id": _localStorage["id"]
+        }, {
+          "id": _localStorage["id"],
+          "ingList": jsonEncode(_localStorage["userFavor"]),
+          "password": _localStorage['passwd'],
+          "recipeCnt": 0,
+        });
+      }
+    });
+    _recipeList.clear();
+    _imgList.clear();
+    await collection2.find().forEach((element) async {
+      // 전부 불러옴
+      _recipeList.add(element);
+    });
+    _recipeList.sort((a, b) => -a['likes'].length.compareTo(b['likes'].length));
+    bucket = mongo.GridFS(db, "image");
+    for (var i = 0; i < _recipeList.length; ++i) {
+      var img = await bucket.chunks.findOne({
+        "_id": _recipeList[i]["picture"],
+      });
+      _imgList.add(MemoryImage(base64Decode(img["data"])));
+    }
+    return Future.value(_recipeList);
   }
 
   void runEverytimeToMatch() {
@@ -48,14 +113,15 @@ class _MainPageState extends State<MainPage> {
   void fetchIngredients() async {
     String data = await DefaultAssetBundle.of(context)
         .loadString('assets/data/ingredient.json');
-    storage.setItem('ing', data);
+    _storage.setItem('ing', data);
     ingredientList = jsonDecode(data).map((cur) => cur["name"]).toList();
+    _storage2?.setItem('ing', ingredientList);
   }
 
   void fetchRecipe() async {
     String data = await DefaultAssetBundle.of(context)
         .loadString('assets/data/recipe.json');
-    storage.setItem('recipe', data);
+    _storage.setItem('recipe', data);
     List<dynamic> recipeDetail = jsonDecode(data);
 
     recipeDetail.map((cur) => cur["nation"]).toList().forEach((element) {
@@ -72,15 +138,57 @@ class _MainPageState extends State<MainPage> {
 
     recipeList =
         List<Recipe>.from(recipeDetail.map((cur) => Recipe.fromJson(cur)));
+
+    _storage2?.setItem('nations', nations);
+    _storage2?.setItem('categories', categories);
+    _storage2?.setItem('levels', levels);
+  }
+
+  void _listen() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) => print('onStatus: $val'),
+        onError: (val) => print('onError: $val'),
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          onResult: (val) => setState(
+            () {
+              _text = val.recognizedWords;
+              print(_text);
+              _controller.text = val.recognizedWords;
+              searchItem = val.recognizedWords;
+            },
+          ),
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     double width = !isVisible ? MediaQuery.of(context).size.width - 30 : 0;
-
     return WillPopScope(
       onWillPop: () async => false,
       child: Scaffold(
+        floatingActionButton: AvatarGlow(
+          animate: _isListening,
+          glowColor: Theme.of(context).primaryColor,
+          endRadius: 75.0,
+          duration: Duration(milliseconds: 2000),
+          repeatPauseDuration: Duration(milliseconds: 100),
+          repeat: true,
+          child: FloatingActionButton(
+            onPressed: () async {
+              _listen();
+            },
+            child: Icon(_isListening ? Icons.mic : Icons.mic_none),
+          ),
+        ),
         appBar: PreferredSize(
           preferredSize: Size.fromHeight(45.0),
           child: Transform(
@@ -104,12 +212,10 @@ class _MainPageState extends State<MainPage> {
               ),
               backgroundColor: Colors.white,
               elevation: 5.0,
-              title: Padding(
-                padding: EdgeInsets.only(left: 70.0),
-                child: Text(
-                  '오늘뭐먹지?',
-                  style: TextStyle(color: Colors.black45),
-                ),
+              centerTitle: true,
+              title: Text(
+                '오늘뭐먹지?',
+                style: TextStyle(color: Colors.black45),
               ),
               actions: [
                 Container(
@@ -182,7 +288,7 @@ class _MainPageState extends State<MainPage> {
                           MaterialPageRoute(
                             builder: (context) => SearchResult(
                               searchParam: List<String>.from(jsonDecode(
-                                  storage.getItem('info'))['userFavor']),
+                                  _storage.getItem('info'))['userFavor']),
                             ),
                           ),
                         );
@@ -271,7 +377,7 @@ class _MainPageState extends State<MainPage> {
                                     ),
                                   ),
                                 ),
-                                onPressed: () {
+                                onPressed: () async {
                                   const fs = LocalFileSystem();
                                   setState(() {
                                     if (fs
@@ -408,102 +514,118 @@ class _MainPageState extends State<MainPage> {
                 children: <Widget>[
                   SizedBox(
                     height: 70.0,
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          flex: 9,
-                          child: Visibility(
-                            visible: !isVisible,
-                            child: AnimatedContainer(
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: !isVisible
-                                      ? Colors.black54
-                                      : Colors.transparent,
-                                ),
-                              ),
-                              duration: Duration(milliseconds: 800),
-                              height: 40,
-                              width: width,
-                              curve: Curves.easeOut,
-                              child: Padding(
-                                padding: EdgeInsets.all(10.0),
-                                child: TextField(
-                                  decoration: InputDecoration(
-                                    border: InputBorder.none,
-                                    focusedBorder: InputBorder.none,
-                                    enabledBorder: InputBorder.none,
-                                    errorBorder: InputBorder.none,
-                                    disabledBorder: InputBorder.none,
-                                  ),
-                                  onChanged: (val) {
-                                    searchParam = val;
-                                  },
-                                ),
-                              ),
+                        Visibility(
+                          visible: !isVisible,
+                          child: Text(
+                            "레시피 검색",
+                            style: TextStyle(
+                              fontSize: 15.0,
                             ),
                           ),
                         ),
-                        Expanded(
-                            flex: 1,
-                            child: Visibility(
-                              visible: !isVisible,
-                              child: AnimatedOpacity(
-                                opacity: isVisible ? 0.0 : 1.0,
-                                duration: Duration(milliseconds: 800),
-                                child: IconButton(
-                                  icon: Icon(Icons.search),
-                                  onPressed: () {
-                                    try {
-                                      Recipe search = recipeList
-                                          .where(
-                                              (cur) => cur.name == searchParam)
-                                          .toList()[0];
-                                      if (search != null) {
-                                        var parsedSearchParam = [
-                                          ...?search.ingredients['주재료'],
-                                          ...?search.ingredients['부재료'],
-                                          ...?search.ingredients['양념'],
-                                        ]
-                                            .map((cur) => Map.from(cur)
-                                                .keys
-                                                .toString()
-                                                .replaceAll(RegExp('[()]'), ''))
-                                            .toList();
-                                        parsedSearchParam
-                                            .sort((a, b) => a.compareTo(b));
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => RecipePage(
-                                              ingredientsForSearch:
-                                                  parsedSearchParam,
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      final alert = AlertDialog(
-                                        title: Text('App'),
-                                        content: Text('검색 결과가 존재하지 않습니다.'),
-                                        actions: <Widget>[
-                                          FlatButton(
-                                              onPressed: () {
-                                                var count = 0;
-                                                Navigator.pop(context);
-                                              },
-                                              child: Text('OK'))
-                                        ],
-                                      );
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => alert,
-                                      );
-                                    }
-                                  },
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 9,
+                              child: Visibility(
+                                visible: !isVisible,
+                                child: AnimatedContainer(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: !isVisible
+                                          ? Colors.black54
+                                          : Colors.transparent,
+                                    ),
+                                  ),
+                                  duration: Duration(milliseconds: 800),
+                                  height: 40,
+                                  width: !isVisible ? width : 0,
+                                  curve: Curves.easeOut,
+                                  child: Padding(
+                                    padding: EdgeInsets.all(10.0),
+                                    child: TextField(
+                                      decoration: InputDecoration(
+                                        border: InputBorder.none,
+                                        focusedBorder: InputBorder.none,
+                                        enabledBorder: InputBorder.none,
+                                        errorBorder: InputBorder.none,
+                                        disabledBorder: InputBorder.none,
+                                      ),
+                                      onChanged: (val) {
+                                        searchParam = val;
+                                      },
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ))
+                            ),
+                            Expanded(
+                                flex: 1,
+                                child: Visibility(
+                                  visible: !isVisible,
+                                  child: AnimatedOpacity(
+                                    opacity: isVisible ? 0.0 : 1.0,
+                                    duration: Duration(milliseconds: 800),
+                                    child: IconButton(
+                                      icon: Icon(Icons.search),
+                                      onPressed: () {
+                                        try {
+                                          Recipe search = recipeList
+                                              .where((cur) =>
+                                                  cur.name == searchParam)
+                                              .toList()[0];
+                                          if (search != null) {
+                                            var parsedSearchParam = [
+                                              ...?search.ingredients['주재료'],
+                                              ...?search.ingredients['부재료'],
+                                              ...?search.ingredients['양념'],
+                                            ]
+                                                .map((cur) => Map.from(cur)
+                                                    .keys
+                                                    .toString()
+                                                    .replaceAll(
+                                                        RegExp('[()]'), ''))
+                                                .toList();
+                                            parsedSearchParam
+                                                .sort((a, b) => a.compareTo(b));
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    RecipePage(
+                                                  ingredientsForSearch:
+                                                      parsedSearchParam,
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          final alert = AlertDialog(
+                                            title: Text('App'),
+                                            content: Text('검색 결과가 존재하지 않습니다.'),
+                                            actions: <Widget>[
+                                              FlatButton(
+                                                  onPressed: () {
+                                                    var count = 0;
+                                                    Navigator.pop(context);
+                                                  },
+                                                  child: Text('OK'))
+                                            ],
+                                          );
+                                          showDialog(
+                                            context: context,
+                                            builder: (_) => alert,
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ))
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -514,226 +636,502 @@ class _MainPageState extends State<MainPage> {
                       child: AnimatedOpacity(
                         opacity: isVisible ? 0.0 : 1.0,
                         duration: Duration(milliseconds: 800),
-                        child: CustomScrollView(
-                          slivers: <Widget>[
-                            SliverToBoxAdapter(
-                              child: Container(
-                                height: 40.0,
-                                width: double.infinity,
-                                color: Colors.grey[100],
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      "Country",
-                                      style: TextStyle(
-                                        fontSize: 18.0,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                        child: FutureBuilder(
+                          future: _recipeListAfterFetch,
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData) {
+                              return CustomScrollView(
+                                slivers: <Widget>[
+                                  SliverToBoxAdapter(
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        int i = 0;
+                                        for (;
+                                            i <
+                                                    snapshot.data[0]['likes']
+                                                        .length &&
+                                                !(snapshot.data[0]['likes']
+                                                        [i] ==
+                                                    jsonDecode(_storage.getItem(
+                                                        'info'))['id']);
+                                            ++i) {}
+                                        if (i <
+                                            snapshot.data[0]['likes'].length) {
+                                          // 좋아요 기록이 있을경우
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  IndividualRecipe(
+                                                recipeList: snapshot.data[0],
+                                                like: true,
+                                              ),
+                                            ),
+                                          ).then((_) async => refreshState());
+                                        } else {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  IndividualRecipe(
+                                                recipeList: snapshot.data[0],
+                                                like: false,
+                                              ),
+                                            ),
+                                          ).then((_) async => refreshState());
+                                          ;
+                                        }
+                                      },
+                                      child: snapshot.data.length != 0 &&
+                                              snapshot.data.isNotEmpty
+                                          ? Container(
+                                              width: double.infinity,
+                                              color: Colors.grey[100],
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    "유저 최고 인기메뉴",
+                                                    style: TextStyle(
+                                                      fontSize: 18.0,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  Padding(
+                                                    padding:
+                                                        EdgeInsets.symmetric(
+                                                      vertical: 10.0,
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Image(
+                                                          image: _imgList[0],
+                                                          width: 100.0,
+                                                        ),
+                                                        SizedBox(
+                                                          width: 10.0,
+                                                        ),
+                                                        SizedBox(
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              Text(
+                                                                snapshot.data[0]
+                                                                    ['name'],
+                                                                style:
+                                                                    TextStyle(
+                                                                  fontSize:
+                                                                      20.0,
+                                                                ),
+                                                              ),
+                                                              Text(snapshot
+                                                                      .data[0]
+                                                                  ['summary']),
+                                                              Row(
+                                                                children: [
+                                                                  Image.asset(
+                                                                    'assets/like.png',
+                                                                    width: 15,
+                                                                  ),
+                                                                  SizedBox(
+                                                                    width: 8.0,
+                                                                  ),
+                                                                  Text(snapshot
+                                                                      .data[0][
+                                                                          'likes']
+                                                                      .length
+                                                                      .toString())
+                                                                ],
+                                                              )
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            )
+                                          : SizedBox(),
                                     ),
-                                    Divider(
-                                      color: Colors.black,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SliverGrid(
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                childAspectRatio: 5.0,
-                                mainAxisSpacing: 10.0,
-                                crossAxisSpacing: 10.0,
-                              ),
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  return GestureDetector(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => SearchResult(
-                                            willOrderByFactor: nations[index],
-                                            div: 0,
-                                            searchParam: [],
-                                          ),
-                                        ),
-                                      );
-                                    },
+                                  ),
+                                  SliverToBoxAdapter(
                                     child: Container(
-                                      width: 80,
-                                      decoration: BoxDecoration(
-                                        borderRadius:
-                                            BorderRadius.circular(5.0),
-                                        color: Colors.white,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 1.0,
-                                            spreadRadius: 0.0,
-                                            offset: Offset(0.0,
-                                                2.0), // shadow direction: bottom right
-                                          )
+                                      height: 40.0,
+                                      width: double.infinity,
+                                      color: Colors.grey[100],
+                                      child: Column(
+                                        children: [
+                                          Text(
+                                            "Country",
+                                            style: TextStyle(
+                                              fontSize: 18.0,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Divider(
+                                            color: Colors.black,
+                                          ),
                                         ],
                                       ),
-                                      child: Center(
-                                        child: Text(nations[index]),
-                                      ),
                                     ),
-                                  );
-                                },
-                                childCount: nations.length,
-                              ),
-                            ),
-                            SliverPadding(
-                              padding: EdgeInsets.only(bottom: 40.0),
-                            ),
-                            SliverToBoxAdapter(
-                              child: Container(
-                                height: 40.0,
-                                width: double.infinity,
-                                color: Colors.grey[100],
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      "Category",
-                                      style: TextStyle(
-                                        fontSize: 18.0,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                  ),
+                                  SliverGrid(
+                                    gridDelegate:
+                                        SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      childAspectRatio: 5.0,
+                                      mainAxisSpacing: 10.0,
+                                      crossAxisSpacing: 10.0,
                                     ),
-                                    Divider(
-                                      color: Colors.black,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SliverGrid(
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                childAspectRatio: 5.0,
-                                mainAxisSpacing: 10.0,
-                                crossAxisSpacing: 10.0,
-                              ),
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  return GestureDetector(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => SearchResult(
-                                            willOrderByFactor:
-                                                categories[index],
-                                            div: 1,
-                                            searchParam: [],
+                                    delegate: SliverChildBuilderDelegate(
+                                      (context, index) {
+                                        return GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    SearchResult(
+                                                  willOrderByFactor:
+                                                      nations[index],
+                                                  div: 0,
+                                                  searchParam: [],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            width: 80,
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(5.0),
+                                              color: Colors.white,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black12,
+                                                  blurRadius: 1.0,
+                                                  spreadRadius: 0.0,
+                                                  offset: Offset(0.0,
+                                                      2.0), // shadow direction: bottom right
+                                                )
+                                              ],
+                                            ),
+                                            child: Center(
+                                              child: Text(nations[index]),
+                                            ),
                                           ),
-                                        ),
-                                      );
-                                    },
+                                        );
+                                      },
+                                      childCount: nations.length,
+                                    ),
+                                  ),
+                                  SliverPadding(
+                                    padding: EdgeInsets.only(bottom: 40.0),
+                                  ),
+                                  SliverToBoxAdapter(
                                     child: Container(
-                                      width: 80,
-                                      decoration: BoxDecoration(
-                                        borderRadius:
-                                            BorderRadius.circular(5.0),
-                                        color: Colors.white,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 1.0,
-                                            spreadRadius: 0.0,
-                                            offset: Offset(0.0,
-                                                2.0), // shadow direction: bottom right
-                                          )
+                                      height: 40.0,
+                                      width: double.infinity,
+                                      color: Colors.grey[100],
+                                      child: Column(
+                                        children: [
+                                          Text(
+                                            "Category",
+                                            style: TextStyle(
+                                              fontSize: 18.0,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Divider(
+                                            color: Colors.black,
+                                          ),
                                         ],
                                       ),
-                                      child: Center(
-                                        child: Text(categories[index]),
-                                      ),
                                     ),
-                                  );
-                                },
-                                childCount: categories.length,
-                              ),
-                            ),
-                            SliverPadding(
-                              padding: EdgeInsets.only(bottom: 40.0),
-                            ),
-                            SliverToBoxAdapter(
-                              child: Container(
-                                height: 40.0,
-                                width: double.infinity,
-                                color: Colors.grey[100],
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      "Level",
-                                      style: TextStyle(
-                                        fontSize: 18.0,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                  ),
+                                  SliverGrid(
+                                    gridDelegate:
+                                        SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      childAspectRatio: 5.0,
+                                      mainAxisSpacing: 10.0,
+                                      crossAxisSpacing: 10.0,
                                     ),
-                                    Divider(
-                                      color: Colors.black,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SliverGrid(
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                childAspectRatio: 5.0,
-                                mainAxisSpacing: 10.0,
-                                crossAxisSpacing: 10.0,
-                              ),
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  return GestureDetector(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => SearchResult(
-                                            willOrderByFactor: levels[index],
-                                            div: 2,
-                                            searchParam: [],
+                                    delegate: SliverChildBuilderDelegate(
+                                      (context, index) {
+                                        return GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    SearchResult(
+                                                  willOrderByFactor:
+                                                      categories[index],
+                                                  div: 1,
+                                                  searchParam: [],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            width: 80,
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(5.0),
+                                              color: Colors.white,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black12,
+                                                  blurRadius: 1.0,
+                                                  spreadRadius: 0.0,
+                                                  offset: Offset(0.0,
+                                                      2.0), // shadow direction: bottom right
+                                                )
+                                              ],
+                                            ),
+                                            child: Center(
+                                              child: Text(categories[index]),
+                                            ),
                                           ),
-                                        ),
-                                      );
-                                    },
+                                        );
+                                      },
+                                      childCount: categories.length,
+                                    ),
+                                  ),
+                                  SliverPadding(
+                                    padding: EdgeInsets.only(bottom: 40.0),
+                                  ),
+                                  SliverToBoxAdapter(
                                     child: Container(
-                                      width: 80,
-                                      decoration: BoxDecoration(
-                                        borderRadius:
-                                            BorderRadius.circular(5.0),
-                                        color: Colors.white,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 1.0,
-                                            spreadRadius: 0.0,
-                                            offset: Offset(0.0,
-                                                2.0), // shadow direction: bottom right
-                                          )
+                                      height: 40.0,
+                                      width: double.infinity,
+                                      color: Colors.grey[100],
+                                      child: Column(
+                                        children: [
+                                          Text(
+                                            "Level",
+                                            style: TextStyle(
+                                              fontSize: 18.0,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Divider(
+                                            color: Colors.black,
+                                          ),
                                         ],
                                       ),
-                                      child: Center(
-                                        child: Text(levels[index]),
+                                    ),
+                                  ),
+                                  SliverGrid(
+                                    gridDelegate:
+                                        SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      childAspectRatio: 5.0,
+                                      mainAxisSpacing: 10.0,
+                                      crossAxisSpacing: 10.0,
+                                    ),
+                                    delegate: SliverChildBuilderDelegate(
+                                      (context, index) {
+                                        return GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    SearchResult(
+                                                  willOrderByFactor:
+                                                      levels[index],
+                                                  div: 2,
+                                                  searchParam: [],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            width: 80,
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(5.0),
+                                              color: Colors.white,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black12,
+                                                  blurRadius: 1.0,
+                                                  spreadRadius: 0.0,
+                                                  offset: Offset(0.0,
+                                                      2.0), // shadow direction: bottom right
+                                                )
+                                              ],
+                                            ),
+                                            child: Center(
+                                              child: Text(levels[index]),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      childCount: levels.length,
+                                    ),
+                                  ),
+                                  SliverPadding(
+                                    padding: EdgeInsets.only(bottom: 30.0),
+                                  ),
+                                  SliverToBoxAdapter(
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 10.0,
+                                        vertical: 10.0,
+                                      ),
+                                      child: Text(
+                                        "사용자 인기 레시피",
+                                        style: TextStyle(
+                                            fontSize: 20.0,
+                                            fontWeight: FontWeight.bold),
                                       ),
                                     ),
-                                  );
-                                },
-                                childCount: levels.length,
-                              ),
-                            ),
-                            SliverPadding(
-                              padding: EdgeInsets.only(bottom: 80.0),
-                            ),
-                          ],
+                                  ),
+                                  SliverPadding(
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 5.0),
+                                    sliver: SliverGrid(
+                                      gridDelegate:
+                                          SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: 2,
+                                        childAspectRatio: 3.5,
+                                        mainAxisSpacing: 10.0,
+                                        crossAxisSpacing: 10.0,
+                                      ),
+                                      delegate: SliverChildBuilderDelegate(
+                                        (context, index) {
+                                          return GestureDetector(
+                                            onTap: () {
+                                              int i = 0;
+                                              for (;
+                                                  i <
+                                                          snapshot
+                                                              .data[index]
+                                                                  ['likes']
+                                                              .length &&
+                                                      !(snapshot.data[index]
+                                                              ['likes'][i] ==
+                                                          jsonDecode(_storage
+                                                                  .getItem(
+                                                                      'info'))[
+                                                              'id']);
+                                                  ++i) {}
+                                              if (i <
+                                                  snapshot.data[index]['likes']
+                                                      .length) {
+                                                // 좋아요 기록이 있을경우
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        IndividualRecipe(
+                                                      recipeList:
+                                                          snapshot.data[0],
+                                                      like: true,
+                                                    ),
+                                                  ),
+                                                ).then((_) async =>
+                                                    refreshState());
+                                                ;
+                                              } else {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        IndividualRecipe(
+                                                      recipeList:
+                                                          snapshot.data[0],
+                                                      like: false,
+                                                    ),
+                                                  ),
+                                                ).then((_) async =>
+                                                    refreshState());
+                                                ;
+                                              }
+                                            },
+                                            child: Container(
+                                              width: 80,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(5.0),
+                                                color: Colors.white,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black12,
+                                                    blurRadius: 1.0,
+                                                    spreadRadius: 0.0,
+                                                    offset: Offset(0.0,
+                                                        2.0), // shadow direction: bottom right
+                                                  )
+                                                ],
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  SizedBox(
+                                                    width: 10.0,
+                                                  ),
+                                                  Image(image: _imgList[index]),
+                                                  SizedBox(
+                                                    width: 10.0,
+                                                  ),
+                                                  Column(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Text(
+                                                        snapshot.data[index]
+                                                            ['name'],
+                                                        style: TextStyle(
+                                                          fontSize: 18.0,
+                                                        ),
+                                                      ),
+                                                      Row(
+                                                        children: [
+                                                          Image.asset(
+                                                            'assets/like.png',
+                                                            width: 15,
+                                                          ),
+                                                          SizedBox(
+                                                            width: 8.0,
+                                                          ),
+                                                          Text(snapshot
+                                                              .data[index]
+                                                                  ['likes']
+                                                              .length
+                                                              .toString())
+                                                        ],
+                                                      )
+                                                    ],
+                                                  )
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        childCount: snapshot.data.length,
+                                      ),
+                                    ),
+                                  ),
+                                  SliverPadding(
+                                    padding: EdgeInsets.only(bottom: 50.0),
+                                  ),
+                                ],
+                              );
+                            }
+                            return Center(child: CircularProgressIndicator());
+                          },
                         ),
                       ),
                     ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:recipe_app/amendingIng.dart';
 import 'package:recipe_app/changeDate.dart';
+import 'package:recipe_app/whatIwritten.dart';
 import 'package:recipe_app/write.dart';
 
 class InfoPage extends StatefulWidget {
@@ -128,7 +129,12 @@ class _InfoPageState extends State<InfoPage> {
                         padding: EdgeInsets.all(0),
                         child: Text("내가 쓴 글"),
                         onPressed: () {
-                          Navigator.pushNamed(context, Write.id);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => WhatIWritten(),
+                            ),
+                          );
                         },
                       ),
                       MaterialButton(
