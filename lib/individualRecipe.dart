@@ -45,10 +45,11 @@ class Ing {
 }
 
 class IndividualRecipe extends StatefulWidget {
-  Map<String, dynamic> recipeList = {};
+  final Map<String, dynamic> recipeList;
+  final List<ImageProvider> imgList;
   bool like = false;
 
-  IndividualRecipe({this.recipeList, this.like});
+  IndividualRecipe({this.recipeList, this.like, this.imgList});
 
   @override
   _IndividualRecipeState createState() => _IndividualRecipeState();
@@ -65,7 +66,7 @@ class _IndividualRecipeState extends State<IndividualRecipe> {
   mongo.DbCollection collection;
   mongo.Db _db;
   LocalStorage _storage;
-
+  int like;
   List<FutureBuilder> recipeProcess = [];
 
   Future<List<ImageProvider>> fetchImage() async {
@@ -161,6 +162,7 @@ class _IndividualRecipeState extends State<IndividualRecipe> {
         ),
       );
     }
+    like = renderParam.likes.length;
     _storage = LocalStorage("login_info");
   }
 
@@ -279,6 +281,9 @@ class _IndividualRecipeState extends State<IndividualRecipe> {
                                       jsonDecode(_storage.getItem('info'))['id'],
                                 },
                               }, upsert: true);
+                              setState(() {
+                                like--;
+                              });
                             } else {
                               collection.update({
                                 "_id": widget.recipeList["_id"]
@@ -288,11 +293,14 @@ class _IndividualRecipeState extends State<IndividualRecipe> {
                                       jsonDecode(_storage.getItem('info'))['id'],
                                 }
                               });
+                              setState(() {
+                                like++;
+                              });
                             }
                           },
                         ),
                         Text(
-                          renderParam.likes.length.toString(),
+                          like.toString(),
                           style: TextStyle(
                             color: Colors.white,
                           ),

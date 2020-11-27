@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -18,8 +19,6 @@ class _WriteState extends State<Write> {
   LocalStorage _storage;
   LocalStorage _storage2;
   static List<_RecipeBox> recipeList = [];
-  List<String> ingList = [];
-  List<String> ingListForAdd = [];
   String dropdownTitle = '선택해주세요 (더블클릭시 삭제)';
 
   // File _image;
@@ -78,19 +77,10 @@ class _WriteState extends State<Write> {
     super.dispose();
   }
 
-  Future<List<dynamic>> fetchIngredients() async {
-    ingList = List<String>.from(_storage?.getItem('ing'));
-    return ingList;
-  }
-
-  Future<bool> _onWillPop() {
-    return Future.value(false);
-  }
-
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      onWillPop: _onWillPop,
+      onWillPop: () async => false,
       child: Scaffold(
         appBar: AppBar(
           centerTitle: true,
@@ -196,19 +186,26 @@ class _WriteState extends State<Write> {
                             if (result != null) {
                               String filePath = result.files.single.path;
                               var _cmpressed_image;
-                              try {
+                              // if(Platform.isAndroid) {
+                              //   _cmpressed_image =
+                              //   await FlutterImageCompress.compressWithFile(
+                              //       filePath,
+                              //       format: CompressFormat.jpeg,
+                              //       quality: 70);
+                              // }
+                              // if(Platform.isIOS) {
+                              //   _cmpressed_image =
+                              //   await FlutterImageCompress.compressWithFile(
+                              //       filePath,
+                              //       format: CompressFormat.heic,
+                              //       quality: 70);
+                              // }
+                              // HEIC 코덱은 android가 지원을 안함
                                 _cmpressed_image =
-                                    await FlutterImageCompress.compressWithFile(
-                                        filePath,
-                                        format: CompressFormat.heic,
-                                        quality: 70);
-                              } catch (e) {
-                                _cmpressed_image =
-                                    await FlutterImageCompress.compressWithFile(
-                                        filePath,
-                                        format: CompressFormat.jpeg,
-                                        quality: 70);
-                              }
+                                await FlutterImageCompress.compressWithFile(
+                                    filePath,
+                                    format: CompressFormat.jpeg,
+                                    quality: 70);
                               Map<String, dynamic> image = {
                                 "_id": "$id--main-$cnt",
                                 "data": base64Encode(_cmpressed_image),
@@ -537,6 +534,7 @@ class _RecipeBox extends StatefulWidget {
 }
 
 class __RecipeBoxState extends State<_RecipeBox> {
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -581,19 +579,31 @@ class __RecipeBoxState extends State<_RecipeBox> {
                     if (result != null) {
                       String filePath = result.files.single.path;
                       var _cmpressed_image;
-                      try {
-                        _cmpressed_image =
-                            await FlutterImageCompress.compressWithFile(
-                                filePath,
-                                format: CompressFormat.heic,
-                                quality: 70);
-                      } catch (e) {
-                        _cmpressed_image =
-                            await FlutterImageCompress.compressWithFile(
-                                filePath,
-                                format: CompressFormat.jpeg,
-                                quality: 70);
-                      }
+                      _cmpressed_image =
+                      await FlutterImageCompress.compressWithFile(
+                          filePath,
+                          format: CompressFormat.heic,
+                          quality: 70);
+                      // if(Platform.isAndroid) {
+                      //   _cmpressed_image =
+                      //         await FlutterImageCompress.compressWithFile(
+                      //             filePath,
+                      //             format: CompressFormat.jpeg,
+                      //             quality: 70);
+                      // }
+                      // if(Platform.isIOS) {
+                      //   _cmpressed_image =
+                      //   await FlutterImageCompress.compressWithFile(
+                      //       filePath,
+                      //       format: CompressFormat.heic,
+                      //       quality: 70);
+                      // }
+                      _cmpressed_image =
+                      await FlutterImageCompress.compressWithFile(
+                          filePath,
+                          format: CompressFormat.jpeg,
+                          quality: 70);
+                      // HEIC 코덱은 android가 지원을 안함
                       Map<String, dynamic> image = {
                         "_id":
                             "${widget.id}--STEP${widget.stepNum}-${widget.count}",

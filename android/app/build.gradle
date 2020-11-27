@@ -50,6 +50,7 @@ android {
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
+
     signingConfigs {
         release {
             keyAlias keystoreProperties['keyAlias']
@@ -68,6 +69,15 @@ android {
             useProguard true
 
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'x86', 'armeabi-v7a'
+            universalApk true
         }
     }
 }

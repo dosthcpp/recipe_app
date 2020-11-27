@@ -1,17 +1,36 @@
 import 'dart:convert';
 import 'dart:collection';
+import 'dart:core';
+
 import 'package:file/local.dart';
 import 'package:flutter/material.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:recipe_app/infoPage.dart';
+import 'package:recipe_app/more.dart';
 import 'package:recipe_app/searchResult.dart';
 import 'package:recipe_app/recipePage.dart';
 import 'package:recipe_app/write.dart';
 import 'package:recipe_app/individualRecipe.dart';
 import 'package:avatar_glow/avatar_glow.dart';
-import 'package:highlight_text/highlight_text.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+
+class recipeAndImg<T1, T2> {
+  final T1 recipeList;
+  final T2 imgList;
+
+  recipeAndImg({
+    this.recipeList,
+    this.imgList,
+  });
+
+  factory recipeAndImg.fromJson(Map<dynamic, dynamic> json) {
+    return recipeAndImg(
+      recipeList: json['recipeList'],
+      imgList: json['imgList'],
+    );
+  }
+}
 
 class MainPage extends StatefulWidget {
   static const id = 'main_page';
@@ -21,7 +40,7 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  bool isVisible = true;
+  bool _isVisible = true;
   Map<String, String> materialList = {};
   Map<String, bool> ingredientExists = {};
   List<String> ingredientsName = [];
@@ -35,6 +54,7 @@ class _MainPageState extends State<MainPage> {
 
   List<Recipe> recipeList = [];
   TextEditingController _controller = TextEditingController();
+  TextEditingController _controller2 = TextEditingController();
 
   LocalStorage _storage;
   LocalStorage _storage2;
@@ -45,12 +65,12 @@ class _MainPageState extends State<MainPage> {
   mongo.GridFS bucket;
 
   List<Map<String, dynamic>> _recipeList = [];
-  Future _recipeListAfterFetch;
+  Future _recipeAndImgListAfterFetch;
   List<ImageProvider> _imgList = [];
 
   stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
-  String _text = '추가할 재료를 말하세요';
+  bool _willUseSpeechRecognize = false;
 
   @override
   void initState() {
@@ -67,14 +87,16 @@ class _MainPageState extends State<MainPage> {
         '&ssl=true');
     collection = db.collection('users');
     collection2 = db.collection('recipe');
-    _recipeListAfterFetch = mongoCheck();
+    _recipeAndImgListAfterFetch = fetchRecipeAndImgList();
   }
 
   refreshState() async {
-    _recipeListAfterFetch = mongoCheck();
+    setState(() {
+      _recipeAndImgListAfterFetch = fetchRecipeAndImgList();
+    });
   }
 
-  Future<List<Map<String, dynamic>>> mongoCheck() async {
+  Future<recipeAndImg> fetchRecipeAndImgList() async {
     await db.open(secure: true);
     final _localStorage = jsonDecode(_storage.getItem('info'));
     await collection.find({"id": _localStorage["id"]}).forEach((element) async {
@@ -103,7 +125,13 @@ class _MainPageState extends State<MainPage> {
       });
       _imgList.add(MemoryImage(base64Decode(img["data"])));
     }
-    return Future.value(_recipeList);
+
+    recipeAndImg ret = recipeAndImg.fromJson({
+      'recipeList': _recipeList,
+      'imgList': _imgList,
+    });
+    await db.close();
+    return Future.value(ret);
   }
 
   void runEverytimeToMatch() {
@@ -155,10 +183,13 @@ class _MainPageState extends State<MainPage> {
         _speech.listen(
           onResult: (val) => setState(
             () {
-              _text = val.recognizedWords;
-              print(_text);
-              _controller.text = val.recognizedWords;
-              searchItem = val.recognizedWords;
+              if(_isVisible) {
+                _controller.text = val.recognizedWords;
+                searchItem = val.recognizedWords;
+              } else if(!_isVisible) {
+                _controller2.text = val.recognizedWords;
+                searchParam = val.recognizedWords;
+              }
             },
           ),
         );
@@ -171,22 +202,29 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    double width = !isVisible ? MediaQuery.of(context).size.width - 30 : 0;
+    double width = !_isVisible ? MediaQuery.of(context).size.width - 30 : 0;
     return WillPopScope(
       onWillPop: () async => false,
       child: Scaffold(
-        floatingActionButton: AvatarGlow(
-          animate: _isListening,
-          glowColor: Theme.of(context).primaryColor,
-          endRadius: 75.0,
-          duration: Duration(milliseconds: 2000),
-          repeatPauseDuration: Duration(milliseconds: 100),
-          repeat: true,
-          child: FloatingActionButton(
-            onPressed: () async {
-              _listen();
-            },
-            child: Icon(_isListening ? Icons.mic : Icons.mic_none),
+        floatingActionButton: AnimatedOpacity(
+          opacity: _willUseSpeechRecognize ? 1.0 : 0.0,
+          duration: Duration(milliseconds: 500),
+          child: Visibility(
+            visible: _willUseSpeechRecognize,
+            child: AvatarGlow(
+              animate: _isListening,
+              glowColor: Theme.of(context).primaryColor,
+              endRadius: 75.0,
+              duration: Duration(milliseconds: 2000),
+              repeatPauseDuration: Duration(milliseconds: 100),
+              repeat: true,
+              child: FloatingActionButton(
+                onPressed: () async {
+                  _listen();
+                },
+                child: Icon(_isListening ? Icons.mic : Icons.mic_none),
+              ),
+            ),
           ),
         ),
         appBar: PreferredSize(
@@ -196,7 +234,7 @@ class _MainPageState extends State<MainPage> {
             child: AppBar(
               leading: MaterialButton(
                 padding: EdgeInsets.all(0),
-                child: isVisible
+                child: _isVisible
                     ? Icon(
                         Icons.search,
                         color: Colors.black45,
@@ -206,7 +244,7 @@ class _MainPageState extends State<MainPage> {
                       ),
                 onPressed: () {
                   setState(() {
-                    isVisible = !isVisible;
+                    _isVisible = !_isVisible;
                   });
                 },
               ),
@@ -223,7 +261,9 @@ class _MainPageState extends State<MainPage> {
                   child: MaterialButton(
                     padding: EdgeInsets.all(0),
                     onPressed: () {
-                      Navigator.pushNamed(context, Write.id);
+                      Navigator.push(context,
+                              MaterialPageRoute(builder: (context) => Write()))
+                          .then((_) async => refreshState());
                     },
                     child: SizedBox(
                       width: 20.0,
@@ -231,6 +271,21 @@ class _MainPageState extends State<MainPage> {
                         'assets/pencil.png',
                         color: Colors.black54,
                       ),
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 30.0,
+                  child: MaterialButton(
+                    padding: EdgeInsets.all(0),
+                    onPressed: () {
+                      setState(() {
+                        _willUseSpeechRecognize = !_willUseSpeechRecognize;
+                      });
+                    },
+                    child: Icon(
+                      Icons.record_voice_over_outlined,
+                      color: Colors.black45,
                     ),
                   ),
                 ),
@@ -254,46 +309,11 @@ class _MainPageState extends State<MainPage> {
         body: Stack(
           children: <Widget>[
             AnimatedOpacity(
-              opacity: isVisible ? 1.0 : 0.0,
+              opacity: _isVisible ? 1.0 : 0.0,
               duration: Duration(milliseconds: 500),
               child: Center(
                 child: Column(
                   children: <Widget>[
-                    MaterialButton(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          vertical: 10.0,
-                        ),
-                        child: Container(
-                          width: MediaQuery.of(context).size.width - 30,
-                          height: 40.0,
-                          decoration: BoxDecoration(
-                            color: Colors.blueAccent,
-                            borderRadius: BorderRadius.circular(
-                              10.0,
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              "내 냉장고 재료 기반 검색",
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                      ),
-                      padding: EdgeInsets.all(0),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SearchResult(
-                              searchParam: List<String>.from(jsonDecode(
-                                  _storage.getItem('info'))['userFavor']),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
                     MaterialButton(
                       child: Padding(
                         padding: EdgeInsets.symmetric(
@@ -518,7 +538,7 @@ class _MainPageState extends State<MainPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Visibility(
-                          visible: !isVisible,
+                          visible: !_isVisible,
                           child: Text(
                             "레시피 검색",
                             style: TextStyle(
@@ -531,22 +551,23 @@ class _MainPageState extends State<MainPage> {
                             Expanded(
                               flex: 9,
                               child: Visibility(
-                                visible: !isVisible,
+                                visible: !_isVisible,
                                 child: AnimatedContainer(
                                   decoration: BoxDecoration(
                                     border: Border.all(
-                                      color: !isVisible
+                                      color: !_isVisible
                                           ? Colors.black54
                                           : Colors.transparent,
                                     ),
                                   ),
                                   duration: Duration(milliseconds: 800),
                                   height: 40,
-                                  width: !isVisible ? width : 0,
+                                  width: !_isVisible ? width : 0,
                                   curve: Curves.easeOut,
                                   child: Padding(
                                     padding: EdgeInsets.all(10.0),
                                     child: TextField(
+                                      controller: _controller2,
                                       decoration: InputDecoration(
                                         border: InputBorder.none,
                                         focusedBorder: InputBorder.none,
@@ -565,9 +586,9 @@ class _MainPageState extends State<MainPage> {
                             Expanded(
                                 flex: 1,
                                 child: Visibility(
-                                  visible: !isVisible,
+                                  visible: !_isVisible,
                                   child: AnimatedOpacity(
-                                    opacity: isVisible ? 0.0 : 1.0,
+                                    opacity: _isVisible ? 0.0 : 1.0,
                                     duration: Duration(milliseconds: 800),
                                     child: IconButton(
                                       icon: Icon(Icons.search),
@@ -632,12 +653,13 @@ class _MainPageState extends State<MainPage> {
                   Expanded(
                     flex: 15,
                     child: Visibility(
-                      visible: !isVisible,
+                      visible: !_isVisible,
                       child: AnimatedOpacity(
-                        opacity: isVisible ? 0.0 : 1.0,
+                        opacity: _isVisible ? 0.0 : 1.0,
                         duration: Duration(milliseconds: 800),
                         child: FutureBuilder(
-                          future: _recipeListAfterFetch,
+                          future: _recipeAndImgListAfterFetch,
+                          // snapshot.data.recipeList, snapshot.data.imgList
                           builder: (context, snapshot) {
                             if (snapshot.hasData) {
                               return CustomScrollView(
@@ -648,22 +670,26 @@ class _MainPageState extends State<MainPage> {
                                         int i = 0;
                                         for (;
                                             i <
-                                                    snapshot.data[0]['likes']
+                                                    snapshot
+                                                        .data
+                                                        .recipeList[0]['likes']
                                                         .length &&
-                                                !(snapshot.data[0]['likes']
-                                                        [i] ==
+                                                !(snapshot.data.recipeList[0]
+                                                        ['likes'][i] ==
                                                     jsonDecode(_storage.getItem(
                                                         'info'))['id']);
                                             ++i) {}
                                         if (i <
-                                            snapshot.data[0]['likes'].length) {
+                                            snapshot.data.recipeList[0]['likes']
+                                                .length) {
                                           // 좋아요 기록이 있을경우
                                           Navigator.push(
                                             context,
                                             MaterialPageRoute(
                                               builder: (context) =>
                                                   IndividualRecipe(
-                                                recipeList: snapshot.data[0],
+                                                recipeList:
+                                                    snapshot.data.recipeList[0],
                                                 like: true,
                                               ),
                                             ),
@@ -674,7 +700,8 @@ class _MainPageState extends State<MainPage> {
                                             MaterialPageRoute(
                                               builder: (context) =>
                                                   IndividualRecipe(
-                                                recipeList: snapshot.data[0],
+                                                recipeList:
+                                                    snapshot.data.recipeList[0],
                                                 like: false,
                                               ),
                                             ),
@@ -682,8 +709,10 @@ class _MainPageState extends State<MainPage> {
                                           ;
                                         }
                                       },
-                                      child: snapshot.data.length != 0 &&
-                                              snapshot.data.isNotEmpty
+                                      child: snapshot.data.recipeList.length !=
+                                                  0 &&
+                                              snapshot
+                                                  .data.recipeList.isNotEmpty
                                           ? Container(
                                               width: double.infinity,
                                               color: Colors.grey[100],
@@ -710,7 +739,8 @@ class _MainPageState extends State<MainPage> {
                                                               .start,
                                                       children: [
                                                         Image(
-                                                          image: _imgList[0],
+                                                          image: snapshot
+                                                              .data.imgList[0],
                                                           width: 100.0,
                                                         ),
                                                         SizedBox(
@@ -723,17 +753,18 @@ class _MainPageState extends State<MainPage> {
                                                                     .start,
                                                             children: [
                                                               Text(
-                                                                snapshot.data[0]
-                                                                    ['name'],
+                                                                snapshot.data
+                                                                        .recipeList[
+                                                                    0]['name'],
                                                                 style:
                                                                     TextStyle(
                                                                   fontSize:
                                                                       20.0,
                                                                 ),
                                                               ),
-                                                              Text(snapshot
-                                                                      .data[0]
-                                                                  ['summary']),
+                                                              Text(snapshot.data
+                                                                      .recipeList[
+                                                                  0]['summary']),
                                                               Row(
                                                                 children: [
                                                                   Image.asset(
@@ -744,7 +775,9 @@ class _MainPageState extends State<MainPage> {
                                                                     width: 8.0,
                                                                   ),
                                                                   Text(snapshot
-                                                                      .data[0][
+                                                                      .data
+                                                                      .recipeList[
+                                                                          0][
                                                                           'likes']
                                                                       .length
                                                                       .toString())
@@ -760,6 +793,48 @@ class _MainPageState extends State<MainPage> {
                                               ),
                                             )
                                           : SizedBox(),
+                                    ),
+                                  ),
+                                  SliverToBoxAdapter(
+                                    child: MaterialButton(
+                                      child: Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 10.0,
+                                        ),
+                                        child: Container(
+                                          width: MediaQuery.of(context)
+                                                  .size
+                                                  .width -
+                                              30,
+                                          height: 40.0,
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue[400],
+                                            borderRadius: BorderRadius.circular(
+                                              10.0,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              "내 냉장고 재료 기반 검색",
+                                              style: TextStyle(
+                                                  color: Colors.white),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      padding: EdgeInsets.all(0),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => SearchResult(
+                                              searchParam: List<String>.from(
+                                                  jsonDecode(_storage.getItem(
+                                                      'info'))['userFavor']),
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ),
                                   SliverToBoxAdapter(
@@ -990,11 +1065,50 @@ class _MainPageState extends State<MainPage> {
                                         horizontal: 10.0,
                                         vertical: 10.0,
                                       ),
-                                      child: Text(
-                                        "사용자 인기 레시피",
-                                        style: TextStyle(
-                                            fontSize: 20.0,
-                                            fontWeight: FontWeight.bold),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            "사용자 인기 레시피",
+                                            style: TextStyle(
+                                                fontSize: 20.0,
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                          GestureDetector(
+                                            child: Container(
+                                              width: 60.0,
+                                              height: 30.0,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(5.0),
+                                                color: Colors.transparent,
+                                                border: Border.all(
+                                                  color: Colors.black,
+                                                ),
+                                              ),
+                                              child: Center(
+                                                child: Text(
+                                                  "더 보기",
+                                                ),
+                                              ),
+                                            ),
+                                            onTap: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => More(
+                                                    recipeList: snapshot
+                                                        .data.recipeList,
+                                                    imgList:
+                                                        snapshot.data.imgList,
+                                                  ),
+                                                ),
+                                              ).then(
+                                                  (_) async => refreshState());
+                                            },
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
@@ -1017,10 +1131,12 @@ class _MainPageState extends State<MainPage> {
                                               for (;
                                                   i <
                                                           snapshot
-                                                              .data[index]
+                                                              .data
+                                                              .recipeList[index]
                                                                   ['likes']
                                                               .length &&
-                                                      !(snapshot.data[index]
+                                                      !(snapshot.data.recipeList[
+                                                                  index]
                                                               ['likes'][i] ==
                                                           jsonDecode(_storage
                                                                   .getItem(
@@ -1028,7 +1144,10 @@ class _MainPageState extends State<MainPage> {
                                                               'id']);
                                                   ++i) {}
                                               if (i <
-                                                  snapshot.data[index]['likes']
+                                                  snapshot
+                                                      .data
+                                                      .recipeList[index]
+                                                          ['likes']
                                                       .length) {
                                                 // 좋아요 기록이 있을경우
                                                 Navigator.push(
@@ -1036,28 +1155,26 @@ class _MainPageState extends State<MainPage> {
                                                   MaterialPageRoute(
                                                     builder: (context) =>
                                                         IndividualRecipe(
-                                                      recipeList:
-                                                          snapshot.data[0],
+                                                      recipeList: snapshot.data
+                                                          .recipeList[index],
                                                       like: true,
                                                     ),
                                                   ),
                                                 ).then((_) async =>
                                                     refreshState());
-                                                ;
                                               } else {
                                                 Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
                                                     builder: (context) =>
                                                         IndividualRecipe(
-                                                      recipeList:
-                                                          snapshot.data[0],
+                                                      recipeList: snapshot.data
+                                                          .recipeList[index],
                                                       like: false,
                                                     ),
                                                   ),
                                                 ).then((_) async =>
                                                     refreshState());
-                                                ;
                                               }
                                             },
                                             child: Container(
@@ -1081,7 +1198,9 @@ class _MainPageState extends State<MainPage> {
                                                   SizedBox(
                                                     width: 10.0,
                                                   ),
-                                                  Image(image: _imgList[index]),
+                                                  Image(
+                                                      image: snapshot
+                                                          .data.imgList[index]),
                                                   SizedBox(
                                                     width: 10.0,
                                                   ),
@@ -1091,8 +1210,9 @@ class _MainPageState extends State<MainPage> {
                                                             .center,
                                                     children: [
                                                       Text(
-                                                        snapshot.data[index]
-                                                            ['name'],
+                                                        snapshot.data
+                                                                .recipeList[
+                                                            index]['name'],
                                                         style: TextStyle(
                                                           fontSize: 18.0,
                                                         ),
@@ -1107,7 +1227,8 @@ class _MainPageState extends State<MainPage> {
                                                             width: 8.0,
                                                           ),
                                                           Text(snapshot
-                                                              .data[index]
+                                                              .data
+                                                              .recipeList[index]
                                                                   ['likes']
                                                               .length
                                                               .toString())
@@ -1120,7 +1241,12 @@ class _MainPageState extends State<MainPage> {
                                             ),
                                           );
                                         },
-                                        childCount: snapshot.data.length,
+                                        childCount: snapshot
+                                                    .data.recipeList.length >
+                                                4
+                                            // 최대 4개
+                                            ? 4
+                                            : snapshot.data.recipeList.length,
                                       ),
                                     ),
                                   ),
