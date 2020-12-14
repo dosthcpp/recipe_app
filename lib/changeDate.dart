@@ -42,8 +42,8 @@ class _ChangeDateState extends State<ChangeDate> {
   syncFromDB() async {
     return this._memoizer.runOnce(() async {
       await db.open();
-      // collection에 id가 없는경우
       if (await collection.findOne({'id': _id}) == null) {
+        // collection에 id가 없는경우
         ing.forEach((_ing) {
           expiry[_ing] = DateTime.now().toString();
         });
@@ -53,6 +53,7 @@ class _ChangeDateState extends State<ChangeDate> {
         });
       } else {
         await collection.find({'id': _id}).forEach((element) async {
+
           if (element['expiry'] != null) {
             ing.forEach((_ing) {
               expiry[_ing] = jsonDecode(element['expiry'])[_ing] ??
@@ -61,8 +62,22 @@ class _ChangeDateState extends State<ChangeDate> {
             await collection.update({
               'id': _id
             }, {
+              '\$set': {
+                'expiry': jsonEncode(expiry),
+              }
+            });
+          } else {
+            // element['expiry']가 null인 경우 새로 업데이트
+            ing.forEach((_ing) {
+              expiry[_ing] =DateTime.now().toString();
+            });
+            print(expiry);
+            await collection.update({
               'id': _id,
-              'expiry': jsonEncode(expiry),
+            }, {
+              '\$set': {
+                'expiry': jsonEncode(expiry),
+              }
             });
           }
         });
