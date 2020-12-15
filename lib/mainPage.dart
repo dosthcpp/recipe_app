@@ -94,7 +94,7 @@ class _MainPageState extends State<MainPage> {
     collection2 = db.collection('recipe');
     _recipeAndImgListAfterFetch = fetchRecipeAndImgList();
     parsedInfo =
-    Map<String, dynamic>.from(jsonDecode(_storage.getItem('info')));
+        Map<String, dynamic>.from(jsonDecode(_storage.getItem('info')));
   }
 
   refreshInfo() async {
@@ -530,35 +530,39 @@ class _MainPageState extends State<MainPage> {
                                 onPressed: () async {
                                   const fs = LocalFileSystem();
                                   setState(() {
-                                    if (fs
-                                        .file(
-                                            '/Users/babosangjamk4/workspace/외주/recipe-app/assets/ingredients/$searchItem.png')
-                                        .existsSync()) {
+                                    // if (fs
+                                    //     .file(
+                                    //         '/Users/babosangjamk4/workspace/외주/recipe-app/assets/ingredients/$searchItem.png')
+                                    //     .existsSync()) {
+                                    //   materialList[searchItem] =
+                                    //       'assets/ingredients/$searchItem.png';
+                                    //   ingredientExists[searchItem] = true;
+                                    // }
+                                    // else {
+                                    //
+                                    // }
+                                    // IOS에서만 fs 모듈 인식
+                                    if (ingredientList.contains(searchItem)) {
                                       materialList[searchItem] =
-                                          'assets/ingredients/$searchItem.png';
-                                      ingredientExists[searchItem] = false;
+                                      'assets/ingredients/$searchItem.png';
+                                      ingredientExists[searchItem] = true;
                                     } else {
-                                      if (ingredientList.contains(searchItem)) {
-                                        materialList[searchItem] =
-                                            'assets/dish.png';
-                                        ingredientExists[searchItem] = true;
-                                      } else {
-                                        final alert = AlertDialog(
-                                          title: Text('App'),
-                                          content: Text('해당 재료가 없습니다.'),
-                                          actions: <Widget>[
-                                            FlatButton(
-                                                onPressed: () {
-                                                  Navigator.pop(context);
-                                                },
-                                                child: Text('OK'))
-                                          ],
-                                        );
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => alert,
-                                        );
-                                      }
+                                      ingredientExists[searchItem] = false;
+                                      final alert = AlertDialog(
+                                        title: Text('App'),
+                                        content: Text('해당 재료가 없습니다.'),
+                                        actions: <Widget>[
+                                          FlatButton(
+                                              onPressed: () {
+                                                Navigator.pop(context);
+                                              },
+                                              child: Text('OK'))
+                                        ],
+                                      );
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) => alert,
+                                      );
                                     }
                                     _controller.clear();
                                     runEverytimeToMatch();
@@ -603,9 +607,10 @@ class _MainPageState extends State<MainPage> {
                                                   Opacity(
                                                     opacity: 0.5,
                                                     child: Image.asset(
-                                                      'assets/dish.png',
+                                                      materialList[
+                                                          ingredientsName[
+                                                              index]],
                                                       height: 80.0,
-                                                      color: Colors.black54,
                                                     ),
                                                   ),
                                                   Positioned.fill(
